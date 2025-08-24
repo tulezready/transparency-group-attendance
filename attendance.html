@@ -131,6 +131,11 @@
             border-left-color: #f44336;
         }
 
+        .member-item.sick {
+            background: #fff3e0;
+            border-left-color: #ff9800;
+        }
+
         .member-name {
             font-size: 1.1rem;
             font-weight: 500;
@@ -175,6 +180,15 @@
             background: #da190b;
         }
 
+        .btn-sick {
+            background: #ff9800;
+            color: white;
+        }
+
+        .btn-sick:hover {
+            background: #f57c00;
+        }
+
         .btn-clear {
             background: #9e9e9e;
             color: white;
@@ -199,6 +213,11 @@
 
         .status-absent {
             background: #f44336;
+            color: white;
+        }
+
+        .status-sick {
+            background: #ff9800;
             color: white;
         }
 
@@ -311,6 +330,10 @@
                     <div class="stat-label">Absent</div>
                 </div>
                 <div class="stat-item">
+                    <div class="stat-number" id="sickCount">0</div>
+                    <div class="stat-label">Sick</div>
+                </div>
+                <div class="stat-item">
                     <div class="stat-number" id="totalCount">6</div>
                     <div class="stat-label">Total Members</div>
                 </div>
@@ -343,7 +366,8 @@
         // Current session data (stored in memory)
         let currentSession = {
             date: new Date().toISOString().split('T')[0],
-            attendance: {}
+            attendance: {},
+            comments: {}
         };
 
         // Session history (stored in memory)
@@ -375,17 +399,31 @@
             members.forEach(member => {
                 const memberDiv = document.createElement('div');
                 const status = currentSession.attendance[member.id];
+                const comment = currentSession.comments[member.id] || '';
                 
                 memberDiv.className = `member-item ${status || ''}`;
                 memberDiv.innerHTML = `
-                    <div>
-                        <span class="member-number">${member.id}.</span>
-                        <span class="member-name">${member.name}</span>
-                        ${status ? `<span class="status-badge status-${status}">${status}</span>` : ''}
+                    <div style="flex: 1;">
+                        <div>
+                            <span class="member-number">${member.id}.</span>
+                            <span class="member-name">${member.name}</span>
+                            ${status ? `<span class="status-badge status-${status}">${status}</span>` : ''}
+                        </div>
+                        ${comment ? `<div style="margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; font-size: 0.9rem; color: #555;"><strong>Note:</strong> ${comment}</div>` : ''}
+                        <div style="margin-top: 10px;">
+                            <input type="text" 
+                                   placeholder="Add comment/note..." 
+                                   value="${comment}"
+                                   onchange="addComment(${member.id}, this.value)"
+                                   style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9rem;" />
+                        </div>
                     </div>
                     <div class="attendance-buttons">
                         <button class="attendance-btn btn-present" onclick="markAttendance(${member.id}, 'present')">
                             ✓ Present
+                        </button>
+                        <button class="attendance-btn btn-sick" onclick="markAttendance(${member.id}, 'sick')">
+                            🤒 Sick
                         </button>
                         <button class="attendance-btn btn-absent" onclick="markAttendance(${member.id}, 'absent')">
                             ✗ Absent
@@ -411,16 +449,28 @@
             updateSummary();
         }
 
+        // Add comment for a member
+        function addComment(memberId, comment) {
+            if (comment.trim() === '') {
+                delete currentSession.comments[memberId];
+            } else {
+                currentSession.comments[memberId] = comment.trim();
+            }
+            renderMembersList();
+        }
+
         // Update summary statistics
         function updateSummary() {
             const attendance = currentSession.attendance;
             const presentCount = Object.values(attendance).filter(status => status === 'present').length;
             const absentCount = Object.values(attendance).filter(status => status === 'absent').length;
+            const sickCount = Object.values(attendance).filter(status => status === 'sick').length;
             const totalMembers = members.length;
             const attendanceRate = totalMembers > 0 ? Math.round((presentCount / totalMembers) * 100) : 0;
 
             document.getElementById('presentCount').textContent = presentCount;
             document.getElementById('absentCount').textContent = absentCount;
+            document.getElementById('sickCount').textContent = sickCount;
             document.getElementById('totalCount').textContent = totalMembers;
             document.getElementById('attendanceRate').textContent = attendanceRate + '%';
         }
@@ -434,6 +484,7 @@
                 const sessionCopy = {
                     date: currentSession.date,
                     attendance: { ...currentSession.attendance },
+                    comments: { ...currentSession.comments },
                     timestamp: new Date().toISOString()
                 };
                 sessionHistory.unshift(sessionCopy);
@@ -443,7 +494,8 @@
             // Start new session
             currentSession = {
                 date: selectedDate || new Date().toISOString().split('T')[0],
-                attendance: {}
+                attendance: {},
+                comments: {}
             };
 
             renderMembersList();
@@ -455,6 +507,7 @@
         // Generate and download report
         function generateReport() {
             const attendance = currentSession.attendance;
+            const comments = currentSession.comments;
             const sessionDate = formatDate(new Date(currentSession.date));
             
             let report = `TRANSPARENCY GROUP ATTENDANCE REPORT\n`;
@@ -462,22 +515,30 @@
             report += `Generated: ${new Date().toLocaleString()}\n\n`;
             
             report += `MEMBER ATTENDANCE:\n`;
-            report += `${'='.repeat(50)}\n`;
+            report += `${'='.repeat(70)}\n`;
             
             members.forEach(member => {
                 const status = attendance[member.id] || 'Not Marked';
-                const statusIcon = status === 'present' ? '✓' : status === 'absent' ? '✗' : '?';
+                const comment = comments[member.id] || '';
+                const statusIcon = status === 'present' ? '✓' : status === 'absent' ? '✗' : status === 'sick' ? '🤒' : '?';
+                
                 report += `${member.id}. ${member.name.padEnd(20)} ${statusIcon} ${status.toUpperCase()}\n`;
+                if (comment) {
+                    report += `   Note: ${comment}\n`;
+                }
+                report += `\n`;
             });
             
             const presentCount = Object.values(attendance).filter(s => s === 'present').length;
             const absentCount = Object.values(attendance).filter(s => s === 'absent').length;
+            const sickCount = Object.values(attendance).filter(s => s === 'sick').length;
             const attendanceRate = Math.round((presentCount / members.length) * 100);
             
             report += `\nSUMMARY:\n`;
             report += `${'='.repeat(50)}\n`;
             report += `Total Members: ${members.length}\n`;
             report += `Present: ${presentCount}\n`;
+            report += `Sick: ${sickCount}\n`;
             report += `Absent: ${absentCount}\n`;
             report += `Attendance Rate: ${attendanceRate}%\n`;
             
@@ -486,7 +547,8 @@
                 report += `${'='.repeat(50)}\n`;
                 sessionHistory.slice(0, 5).forEach((session, index) => {
                     const sessionPresent = Object.values(session.attendance).filter(s => s === 'present').length;
-                    report += `${formatDate(new Date(session.date))}: ${sessionPresent}/${members.length} present\n`;
+                    const sessionSick = Object.values(session.attendance).filter(s => s === 'sick').length;
+                    report += `${formatDate(new Date(session.date))}: ${sessionPresent} present, ${sessionSick} sick\n`;
                 });
             }
 
@@ -517,6 +579,7 @@
             
             sessionHistory.slice(0, 10).forEach(session => {
                 const presentCount = Object.values(session.attendance).filter(s => s === 'present').length;
+                const sickCount = Object.values(session.attendance).filter(s => s === 'sick').length;
                 const attendanceRate = Math.round((presentCount / members.length) * 100);
                 
                 const historyItem = document.createElement('div');
@@ -526,7 +589,7 @@
                         <div>
                             <strong>${formatDate(new Date(session.date))}</strong>
                             <div style="color: #666; font-size: 0.9rem;">
-                                ${presentCount}/${members.length} present (${attendanceRate}%)
+                                ${presentCount} present, ${sickCount} sick, ${members.length - presentCount - sickCount} absent (${attendanceRate}%)
                             </div>
                         </div>
                         <div style="color: ${attendanceRate >= 80 ? '#4CAF50' : attendanceRate >= 60 ? '#ff9800' : '#f44336'}; font-weight: bold;">
